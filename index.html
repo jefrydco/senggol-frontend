@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Senggol Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body>
+  <main id="app">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 p-5">
+      <section id="login-chat">
+        <section id="login">
+          <form @submit.prevent="handleLogin">
+            <div class="username mb-5">
+              <label for="Username">Username</label>
+              <input
+                v-model="credential.username"
+                :disabled="isLoading"
+                id="Username"
+                class="block bg-red-200 rounded p-3 w-full disabled:opacity-50"
+                type="text"
+                name="username"
+              >
+            </div>
+            <div class="password mb-5">
+              <label for="Password">Password</label>
+              <input
+                v-model="credential.password"
+                :disabled="isLoading"
+                id="Password"
+                class="block bg-red-200 rounded p-3 w-full disabled:opacity-50"
+                type="text"
+                name="password"
+              >
+            </div>
+            <button
+              class="bg-red-500 rounded p-3 text-white disabled:opacity-50"
+              :disabled="isLoading"
+              type="submit"
+              @click.prevent="handleLogin"
+            >
+              {{ isLoading ? 'Loading' : 'Login' }}
+            </button>
+          </form>
+        </section>
+        <hr class="border border-red-700 my-10">
+        <section id="chat" class="max-h-96 overflow-auto">
+          <button
+            v-for="peer in peers"
+            :key="peer.id"
+            class="block w-full p-3 border border-red-300 text-left mb-2"
+            @click="getMessage(peer)"
+          >
+            {{ peer.username }}
+            <span v-if="peer.unseen_messages_count">({{ peer.unseen_messages_count }})</span>
+          </button>
+        </section>
+      </section>
+      <section id="message">
+        <div class="max-h-96 overflow-auto mb-10">
+          <div v-for="message in messages" :key="message.message_id" class="message">
+            <h3 :class="{ 'justify-end': message.direction === 'OUTBOUND' }" class="flex flex-row">
+              {{ message.direction === 'OUTBOUND' ?  credential.username : currentPeer.username }}
+            </h3>
+            <div :class="{ 'justify-end': message.direction === 'OUTBOUND' }" class="flex">
+              <div :class="{ 'justify-end': message.direction === 'OUTBOUND' }" class="message__bubble border border-red-300 rounded py-3 px-5 w-2/3 flex flex-row">
+                {{ message.message_content }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grid gap-5" style="grid-template-columns: 5fr 1fr">
+          <form @submit.prevent="handleSend">
+            <div>
+              <label for="Message">Message</label>
+              <input
+                v-model="message"
+                :disabled="isLoading"
+                id="Message"
+                class="block bg-red-200 rounded p-3 w-full disabled:opacity-50"
+                type="text"
+                name="message"
+              >
+            </div>
+            <button
+              class="bg-red-500 rounded text-white disabled:opacity-50"
+              :disabled="isLoading"
+              type="submit"
+              @click.prevent="handleSend"
+            >
+              {{ isLoading ? 'Loading' : 'Send' }}
+            </button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+  <script>
+    const vm = new Vue({
+      el: '#app',
+      data() {
+        return {
+          isLoading: false,
+          credential: {
+            username: 'jefrydco',
+            password: 'admin123'
+          },
+          peers: [],
+          currentPeer: undefined,
+          messages: [],
+          message: undefined
+        }
+      },
+      mounted() {
+        this.getMessage({id: '1642726711', username: 'peer'})
+      },
+      methods: {
+        async handleLogin() {
+          try {
+            this.isLoading = true
+            const response = await fetch('http://localhost:8080/register', {
+              method: 'POST',
+              body: JSON.stringify(this.credential)
+            })
+            if (response.status === 201) {
+              alert('Login success!')
+              await this.getPeer()
+              return
+            }
+
+            const responseJson = await response.json()
+            if (responseJson.code === 'INTERNAL_SERVER_ERROR' && responseJson.reason.includes('duplicate')) {
+              await this.getPeer()
+              return
+            }
+            alert('Failed to login')
+          } catch (error) {
+            alert('Failed to login')
+          } finally {
+            this.isLoading = false
+          }
+        },
+        async getPeer() {
+          try {
+            this.isLoading = true
+            const responseJson = await fetch('http://localhost:8080/peers?page_num=1&page_size=10', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Basic ${btoa(`${this.credential.username}:${this.credential.password}`)}`
+              }
+            }).then((_) => _.json())
+
+            if (responseJson.code === 'INTERNAL_SERVER_ERROR') {
+              alert('Failed to load peer')
+              return
+            }
+
+            this.peers = responseJson.peers
+          } catch (error) {
+            console.log(error)
+            alert('Failed to get peer')
+          } finally {
+            this.isLoading = false
+          }
+        },
+        async getMessage(peer) {
+          try {
+            this.isLoading = true
+            this.currentPeer = peer
+            const responseJson = await fetch(`http://localhost:8080/peers/${peer.id}/messages?limit=10`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Basic ${btoa(`${this.credential.username}:${this.credential.password}`)}`
+              }
+            }).then((_) => _.json())
+
+            if (responseJson.code === 'INTERNAL_SERVER_ERROR') {
+              alert('Failed to load message')
+              return
+            }
+
+            this.messages = responseJson.messages
+          } catch (error) {
+            console.log(error)
+            alert('Failed to get message')
+          } finally {
+            this.isLoading = false
+          }
+        },
+        async handleSend() {
+          try {
+            this.isLoading = true
+          } catch (error) {
+            console.log(error)
+            alert('Failed to send')
+          } finally {
+            this.isLoading = false
+          }
+        }
+      }
+    })
+    window.vm = vm
+  </script>
+</body>
+
+</html>

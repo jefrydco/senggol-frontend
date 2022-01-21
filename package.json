@@ -1,0 +1,12 @@
+{
+  "name": "senggol-frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "serve"
+  },
+  "devDependencies": {
+    "serve": "^13.0.2"
+  }
+}
